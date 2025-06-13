@@ -1,67 +1,42 @@
 from email.mime.multipart import MIMEMultipart
-from pydantic import BaseModel, EmailStr
 from email.mime.text import MIMEText
-from fastapi import  HTTPException
-from dotenv import load_dotenv 
+from fastapi import  HTTPException, Request, Response
 from jinja2 import Template
 from aiogram import Bot
+from urllib.parse import unquote, parse_qs
+from src.models import Purchase
+
+import smtplib, re, json
+
+from dotenv import load_dotenv 
 from os import getenv
+from src.models import logger
 
-import smtplib, re, logging
-
-
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-logger = logging.getLogger(__name__)
 load_dotenv()
 
-class PaymentData(BaseModel):
-    sys: str
-    systranid: str
-    orderid: str
-    products: list[str]
-    amount: str
+async def parseData(request: Request) -> Purchase:
+    try:
+        logger.info("Receiving data...")
+        raw_data = await request.body()
+        parsed_data = parse_qs(raw_data.decode("utf-8"))
 
-class Purchase(BaseModel):
-    Email: EmailStr
-    Name: str
-    Phone: str
-    input: str
-    Checkbox: str
-    Checkbox_2: str
-    Checkbox_3: str
-    payment: PaymentData
-    formid: str
-    formname: str
+        if "test" in parsed_data:
+            return Response(status_code = 200)
+        
+        else:
+            logger.info("Parsing data...")
+            data_dict = {key: unquote(value[0]) for key, value in parsed_data.items()}
+            data_dict["payment"] = json.loads(data_dict["payment"])
+            form_data = Purchase(**data_dict)
+            logger.info(f"Data succefull parsed: {form_data.Email} {form_data.payment.products}")
 
-coursesList = {
-    getenv("FIRST_NAME"): {
-        "channel": getenv('FIRST_CHANNEL'),
-        "chat": None
-    },
-    getenv("UPDATE_NAME"): {
-        "channel": getenv('PREMIUM_CHANNEL'),
-        "chat": getenv('PREMIUM_CHAT')
-    },
-    getenv("SECOND_NAME"): {
-        "channel": getenv('PREMIUM_CHANNEL'),
-        "chat": getenv('PREMIUM_CHAT')
-    },
-    getenv("THIRD_NAME"): {
-        "channel": getenv('PREMIUM_CHANNEL'),
-        "chat": getenv('PREMIUM_CHAT')
-    },
-    getenv("FOUR_NAME"): {
-        "channel": getenv('FOUR_CHANNEL'),
-        "chat": None
-    },
-    getenv("FIVE_NAME"): {
-        "channel": getenv('FIVE_CHANNEL'),
-        "chat": None
-    }
-}
+        return form_data
+    
+    except Exception as e:
+        logger.error(f"{type(e).__name__} while parcing data...")
+        raise HTTPException(status_code=500, detail=f"Internal server error.")
 
-
-async def SendMail(recipient_email: str, link: str, name: str, course: str):
+async def sendMail(recipient_email: str, link: str, name: str, course: str):
     try:
         logger.info("Creating Email template.")
         smtp_server = smtplib.SMTP("smtp.gmail.com", 587)
@@ -77,21 +52,21 @@ async def SendMail(recipient_email: str, link: str, name: str, course: str):
         
         logger.info("Insert text into Email.")
         if (getenv("SECOND_NAME") in course) or (getenv("THIRD_NAME") in course) or (getenv("UPDATE_NAME") in course):
-            with open("Templates/two_links.txt", "r", encoding="utf-8") as file:
+            with open("src/Templates/two_links.txt", "r", encoding="utf-8") as file:
                 template_text = file.read()
             link
             template = Template(template_text)
             mes = template.render({'name': name, 'channel': link_list[0], 'chat': link_list[1]})
         
         else:
-            with open("Templates/one_link.txt", "r", encoding="utf-8") as file:
+            with open("src/Templates/one_link.txt", "r", encoding="utf-8") as file:
                 template_text = file.read()
             template = Template(template_text)
             mes = template.render({'name': name, 'channel': link})
         logger.info("Template create correctly.")
 
-    except Exception:
-        logger.error(f"Error while creating Email template:", exc_info=True)
+    except Exception as e:
+        logger.error(f"{type(e).__name__} while creating Email template:", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Internal server error.")
     
     else:
@@ -100,7 +75,7 @@ async def SendMail(recipient_email: str, link: str, name: str, course: str):
             smtp_server.sendmail(getenv("ELOGIN"), recipient_email, msg.as_string())
             logger.info("Sending Email.")
         except Exception as e:
-            logger.error("Error while sending mail", exc_info=True)
+            logger.error(f"{type(e).__name__} while sending mail", exc_info=True)
         else:
             logger.info("Mail send correctly")
     
@@ -108,12 +83,12 @@ async def SendMail(recipient_email: str, link: str, name: str, course: str):
         smtp_server.quit()
         logger.info("SMTP server closing.")
 
-async def Create_link(course: str):
+async def createLink(course: str, courses: dict):
     async with Bot(token = getenv("TOKEN")) as bot:
         try:
-            for name in coursesList:
+            for name in courses:
                 if name in course:
-                    config = coursesList[name]
+                    config = courses[name]
                     channel_link = await bot.create_chat_invite_link(
                         chat_id=config["channel"],
                         member_limit=1
