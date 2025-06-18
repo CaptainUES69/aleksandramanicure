@@ -3,7 +3,7 @@ from email.mime.text import MIMEText
 from fastapi import  HTTPException, Request, Response
 from jinja2 import Template
 from aiogram import Bot
-from urllib.parse import unquote, parse_qs
+from urllib.parse import unquote
 from src.models import Purchase
 
 import smtplib, re, json
@@ -14,13 +14,10 @@ from src.models import logger
 
 load_dotenv()
 
-async def parseData(request: Request) -> Purchase:
+async def parse_data(parsed_data: dict[str, list[str]]):
     try:
         logger.info("Receiving data...")
-        raw_data = await request.body()
-        parsed_data = parse_qs(raw_data.decode("utf-8"))
-
-        if "test" in parsed_data:
+        if "test=test" in parsed_data:
             return Response(status_code = 200)
         
         else:
@@ -28,15 +25,15 @@ async def parseData(request: Request) -> Purchase:
             data_dict = {key: unquote(value[0]) for key, value in parsed_data.items()}
             data_dict["payment"] = json.loads(data_dict["payment"])
             form_data = Purchase(**data_dict)
-            logger.info(f"Data succefull parsed: {form_data.Email} {form_data.payment.products}")
+            logger.info(f"Data succefull parsed...")
 
         return form_data
     
     except Exception as e:
-        logger.error(f"{type(e).__name__} while parcing data...")
+        logger.error(f"{type(e).__name__} while parcing data...", exc_info = True)
         raise HTTPException(status_code=500, detail=f"Internal server error.")
 
-async def sendMail(recipient_email: str, link: str, name: str, course: str):
+async def send_mail(recipient_email: str, link: str, name: str, course: str):
     try:
         logger.info("Creating Email template.")
         smtp_server = smtplib.SMTP("smtp.gmail.com", 587)
@@ -83,7 +80,7 @@ async def sendMail(recipient_email: str, link: str, name: str, course: str):
         smtp_server.quit()
         logger.info("SMTP server closing.")
 
-async def createLink(course: str, courses: dict):
+async def create_link(course: str, courses: dict):
     async with Bot(token = getenv("TOKEN")) as bot:
         try:
             for name in courses:

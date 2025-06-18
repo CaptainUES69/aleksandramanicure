@@ -1,8 +1,9 @@
 from fastapi import FastAPI, Request, HTTPException, Response
 from contextlib import asynccontextmanager
+from urllib.parse import parse_qs
 import uvicorn
 
-from src.functions import sendMail, createLink, parseData
+from src.functions import send_mail, create_link, parse_data
 from src.models import coursesList
 
 from dotenv import load_dotenv 
@@ -23,11 +24,14 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan = lifespan)
 
 @app.post("/this/is/buy", tags=["Сашины курсы"], summary="Прием вебхука")
-async def receiveData(request: Request):
+async def receive_data(request: Request):
     try:
-        form_data = await parseData(request)
-        link = await createLink(str(form_data.payment.products), coursesList)
-        await sendMail(form_data.Email, link, form_data.Name, str(form_data.payment.products))
+        raw_data = await request.body()
+        parsed_data = parse_qs(raw_data.decode("utf-8"))
+
+        form_data = await parse_data(parsed_data)
+        link = await create_link(str(form_data.payment.products), coursesList)
+        await send_mail(form_data.Email, link, form_data.Name, str(form_data.payment.products))
     
     except HTTPException as e:
         send_telegram_message(e)
