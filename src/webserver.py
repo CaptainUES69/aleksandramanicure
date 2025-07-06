@@ -58,7 +58,7 @@ def send_telegram_message(e: Exception):
                 "<b>Traceback:</b>\n"
                 f"<pre>{traceback.format_exc()}</pre>")
         
-        url = f"https://api.telegram.org/bot{getenv("TOKEN")}/sendMessage"
+        url = f"https://api.telegram.org/bot{getenv('TOKEN')}/sendMessage"
         payload = {
             "chat_id": getenv("TECH_SUPPORT_ID"),
             "text": message,
