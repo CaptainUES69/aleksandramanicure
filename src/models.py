@@ -4,12 +4,13 @@ from dotenv import load_dotenv
 
 import logging
 
-load_dotenv
+load_dotenv()
 
 
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
+
 
 class PaymentData(BaseModel):
     sys: str
@@ -53,4 +54,5 @@ coursesList = {
 
     getenv("FIVE_NAME"): {
         "channel": getenv('FIVE_CHANNEL'),
-        "chat": None}}
+        "chat": None}
+}

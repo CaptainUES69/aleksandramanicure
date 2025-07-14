@@ -1,31 +1,27 @@
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from tarfile import data_filter
 from fastapi import  HTTPException, Request, Response
 from jinja2 import Template
 from aiogram import Bot
 from urllib.parse import unquote
-from src.models import Purchase
+from src.models import Purchase, coursesList
 
 import smtplib, re, json
 
 from dotenv import load_dotenv 
-from os import getenv
+from os import getenv       
 from src.models import logger
 
 load_dotenv()
 
 async def parse_data(parsed_data: dict[str, list[str]]):
     try:
-        logger.info("Receiving data...")
-        if "test=test" in parsed_data:
-            return Response(status_code = 200)
-        
-        else:
-            logger.info("Parsing data...")
-            data_dict = {key: unquote(value[0]) for key, value in parsed_data.items()}
-            data_dict["payment"] = json.loads(data_dict["payment"])
-            form_data = Purchase(**data_dict)
-            logger.info(f"Data succefull parsed...")
+        logger.info("Parsing data...")
+        data_dict = {key: unquote(value[0]) for key, value in parsed_data.items()}
+        data_dict["payment"] = json.loads(data_dict["payment"])
+        form_data = Purchase(**data_dict)
+        logger.info(f"Data succefull parsed...")
 
         return form_data
     
@@ -80,12 +76,12 @@ async def send_mail(recipient_email: str, link: str, name: str, course: str):
         smtp_server.quit()
         logger.info("SMTP server closing.")
 
-async def create_link(course: str, courses: dict):
+async def create_link(course: str):
     async with Bot(token = getenv("TOKEN")) as bot:
         try:
-            for name in courses:
+            for name in coursesList:
                 if name in course:
-                    config = courses[name]
+                    config = coursesList[name]
                     channel_link = await bot.create_chat_invite_link(
                         chat_id=config["channel"],
                         member_limit=1

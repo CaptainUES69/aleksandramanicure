@@ -26,12 +26,19 @@ app = FastAPI(lifespan = lifespan)
 @app.post("/this/is/buy", tags=["Сашины курсы"], summary="Прием вебхука")
 async def receive_data(request: Request):
     try:
-        raw_data = await request.body()
-        parsed_data = parse_qs(raw_data.decode("utf-8"))
 
-        form_data = await parse_data(parsed_data)
-        link = await create_link(str(form_data.payment.products), coursesList)
-        await send_mail(form_data.Email, link, form_data.Name, str(form_data.payment.products))
+        raw_data = await request.body()
+        logger.info(raw_data.decode("utf-8"))
+        parsed_data = parse_qs(raw_data.decode("utf-8"))
+        logger.info(parsed_data)
+        if "test" in parsed_data:
+            return Response(status_code = 200)
+        
+        else:
+            form_data = await parse_data(parsed_data)
+            logger.info(f"Data succefull received: {form_data.Email} {form_data.payment.products}")
+            link = await create_link(str(form_data.payment.products))
+            await send_mail(form_data.Email, link, form_data.Name, str(form_data.payment.products))
     
     except HTTPException as e:
         send_telegram_message(e)
@@ -43,8 +50,11 @@ async def receive_data(request: Request):
         HTTPException(status_code = 500, detail=f"Internal server error.")
         
     else:
-        logger.info(f"Data succefull received: {form_data.Email} {form_data.payment.products}")
         return Response(status_code = 200)
+
+@app.get("/test")
+async def test():
+    return "hello"
 
 def send_telegram_message(e: Exception):
     logger.critical("Exception(s) catched sending to Telegram...")
@@ -58,9 +68,9 @@ def send_telegram_message(e: Exception):
                 "<b>Traceback:</b>\n"
                 f"<pre>{traceback.format_exc()}</pre>")
         
-        url = f"https://api.telegram.org/bot{getenv('TOKEN')}/sendMessage"
+        url = f"https://api.telegram.org/bot{getenv('TECHTOKEN')}/sendMessage"
         payload = {
-            "chat_id": getenv("TECH_SUPPORT_ID"),
+            "chat_id": getenv("TECH_SUPPORT_ID"),   
             "text": message,
             "parse_mode": "HTML"}
 
@@ -72,6 +82,4 @@ def send_telegram_message(e: Exception):
 
 if __name__ == "__main__":
     uvicorn.run(
-        "src.webserver:app", host="127.0.0.1", port=8000)
-        # ssl_keyfile="/etc/letsencrypt/live/aleksandramanicureserver.ru/privkey.pem", 
-        # ssl_certfile="/etc/letsencrypt/live/aleksandramanicureserver.ru/cert.pem")
+        "src.webserver:app", host="127.0.0.1", port=5000)
