@@ -17,30 +17,30 @@ from .utility import (CourseList, FileTemplates, GoogleUser, ProcessUser,
 
 
 class Methods:
-    __bot: Bot
-    __logger: Logger = CustomLogger("methods")._logger
+    _bot: Bot
+    _logger: Logger = CustomLogger("methods")._logger
 
     # Внутренние методы
 
     def __init__(self):
         load_dotenv(override=True)
-        self.__bot = Bot(token=getenv("LINK_TOKEN"))
+        self._bot = Bot(token=getenv("LINK_TOKEN"))
         pass
 
-    async def __create_link_async(self, chat_id: str | int) -> str | None:
+    async def _create_link_async(self, chat_id: str | int) -> str | None:
         try:
-            link_data: ChatInviteLink = await self.__bot.create_chat_invite_link(
+            link_data: ChatInviteLink = await self._bot.create_chat_invite_link(
                 chat_id=chat_id, member_limit=1
             )
             return link_data.invite_link
 
         except Exception as e:
-            self.__logger.error(
+            self._logger.error(
                 f"Exception type: {e.__class__.__name__}, while creating invite link to {chat_id}"
             )
             return
 
-    def __create_user_XL(self, data: ProcessUser) -> str:
+    def _create_user_XL(self, data: ProcessUser) -> str:
         response = post(
             url=ProdamusAPIUtility.create_user.value,
             headers=ProdamusAPIUtility.headers.value,
@@ -48,23 +48,23 @@ class Methods:
         )
         body = response.json().get("body")
         if response.status_code == 200 and body is not None:
-            self.__logger.info(f"User: {data.Email} created")
+            self._logger.info(f"User: {data.Email} created")
             return body
 
         elif response.status_code == 400 and any(
             "emailAlreadyExists" == error.get("type")
             for error in response.json().get("errors")
         ):
-            self.__logger.info(f"User: {data.Email} already exist")
+            self._logger.info(f"User: {data.Email} already exist")
             return
 
         else:
-            self.__logger.warning(
+            self._logger.warning(
                 f"User doesn`t created because of: {response.status_code}, {response.reason}\n{response.text}"
             )
             return
 
-    def __scenario_run(self, data: ProcessUser, user_id: str) -> str:
+    def _scenario_run(self, data: ProcessUser, user_id: str) -> str:
         response = post(
             url=ProdamusAPIUtility.scenario_run.value,
             headers=ProdamusAPIUtility.headers.value,
@@ -77,7 +77,7 @@ class Methods:
         )
         body = response.json().get("body")
         if not body:
-            self.__logger.error("Empty body while run scenario")
+            self._logger.error("Empty body while run scenario")
             return
         return body
 
@@ -86,30 +86,30 @@ class Methods:
     async def process_user_Telegram(self, data: ProcessUser):
         chat_id: str = CourseList.chat_id_by_title(data.Course)
         if not chat_id:
-            self.__logger.error(
+            self._logger.error(
                 f"Course {data.Course} doesn`t response correctly, check admin rights, and chat_id in CourseList"
             )
             return
-        invite_link = await self.__create_link_async(chat_id)
+        invite_link = await self._create_link_async(chat_id)
 
         self.send_email(data.Email, invite_link, data.Name, data.Course)
         return invite_link
 
     def process_user_XL(self, data: ProcessUser):
-        user_id = self.__create_user_XL(data)
+        user_id = self._create_user_XL(data)
         if not user_id:
             return
 
-        scenario = self.__scenario_run(data, user_id)
+        scenario = self._scenario_run(data, user_id)
         if scenario:
-            self.__logger.info(
+            self._logger.info(
                 f"User: {data.Email} with Course: {data.Course}, processed correct"
             )
 
     def send_email(self, recipient_email: str, link: str, name: str, course_name: str):
         try:
-            msg = MIMEMultipart()
             smtp_server = SMTP("smtp.gmail.com", 587)
+            msg = MIMEMultipart()
             smtp_server.starttls()
             smtp_server.login(GoogleUser.Login.value, GoogleUser.Password.value)
 
@@ -134,15 +134,15 @@ class Methods:
 
     async def write_file(self, filepath_input: str, content: str) -> bool:
         filepath = Path(filepath_input)
-        self.__logger.info(f"Start changing: {filepath}")
+        self._logger.info(f"Start changing: {filepath}")
         async with aiofiles.open(filepath, mode="w", encoding="utf-8") as f:
             try:
                 await f.write(content)
-                self.__logger.info(f"File {filepath.name} changed")
+                self._logger.info(f"File {filepath.name} changed")
                 return True
 
             except Exception as e:
-                self.__logger.critical(
+                self._logger.critical(
                     f"Exception with type: {type(e).__name__}", exc_info=True
                 )
                 return False
@@ -154,6 +154,6 @@ class Methods:
                 return content
 
             except Exception as e:
-                self.__logger.critical(
+                self._logger.critical(
                     f"Exception with type: {type(e).__name__}", exc_info=True
                 )
