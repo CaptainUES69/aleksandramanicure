@@ -1,46 +1,18 @@
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-from os import getenv
-from pathlib import Path
-from smtplib import SMTP
-
-import aiofiles
-from aiogram import Bot
-from aiogram.types import ChatInviteLink
-from dotenv import load_dotenv
-from jinja2 import Template
-from requests import post
+from requests import post, get
 
 from .conf import CustomLogger, Logger
-from .utility import (CourseList, FileTemplates, GoogleUser, ProcessUser,
-                      ProdamusAPIUtility)
+from .utility import ProcessUser, ProdamusAPIUtility, Courses
 
 
 class Methods:
-    _bot: Bot
     _logger: Logger = CustomLogger("methods")._logger
 
     # Внутренние методы
 
     def __init__(self):
-        load_dotenv(override=True)
-        self._bot = Bot(token=getenv("LINK_TOKEN"))
         pass
 
-    async def _create_link_async(self, chat_id: str | int) -> str | None:
-        try:
-            link_data: ChatInviteLink = await self._bot.create_chat_invite_link(
-                chat_id=chat_id, member_limit=1
-            )
-            return link_data.invite_link
-
-        except Exception as e:
-            self._logger.error(
-                f"Exception type: {e.__class__.__name__}, while creating invite link to {chat_id}"
-            )
-            return
-
-    def _create_user_XL(self, data: ProcessUser) -> str:
+    def _create_user(self, data: ProcessUser) -> str:
         response = post(
             url=ProdamusAPIUtility.create_user.value,
             headers=ProdamusAPIUtility.headers.value,
@@ -48,19 +20,12 @@ class Methods:
         )
         body = response.json().get("body")
         if response.status_code == 200 and body is not None:
-            self._logger.info(f"User: {data.Email} created")
+            self._logger.info(f"Inner - User: {data.Email} created")
             return body
-
-        elif response.status_code == 400 and any(
-            "emailAlreadyExists" == error.get("type")
-            for error in response.json().get("errors")
-        ):
-            self._logger.info(f"User: {data.Email} already exist")
-            return
 
         else:
             self._logger.warning(
-                f"User doesn`t created because of: {response.status_code}, {response.reason}\n{response.text}"
+                f"Inner - User doesn`t created because of: {response.status_code}, {response.reason}\n{response.text}"
             )
             return
 
@@ -70,90 +35,83 @@ class Methods:
             headers=ProdamusAPIUtility.headers.value,
             json={
                 "scenarioId": ProdamusAPIUtility.scenarios.value.get("Тест"),
-                "contactId": user_id,
-                "contactData": {"email": data.Email, "firstName": data.Name},
-                "data": {"course": data.Course},
+                "contactId": str(user_id),
+                "contactData": {"email": str(data.Email), "firstName": str(data.Name)},
+                "data": {"course": str(data.Course)},
             },
         )
         body = response.json().get("body")
         if not body:
-            self._logger.error("Empty body while run scenario")
+            self._logger.error("Inner - Empty body while run scenario")
             return
         return body
 
+    def _fetch_user_id_by_email(self, email: setattr) -> list[dict[str, str]]:
+        response = post(
+            url=ProdamusAPIUtility.get_users.value,
+            headers=ProdamusAPIUtility.headers.value,
+            json={"filter": {"email": email}},
+        )
+        body = response.json().get("body").get("items")
+        if response.status_code == 200 and body is not None:
+            self._logger.info(f"Inner - User found: {email}")
+            return body[0].get("id")
+
+        else:
+            self._logger.warning(f"Inner - User not found: {email}")
+            return
+
+    def _fetch_user_library_name(self, id: str) -> list[str]:
+        response = get(
+            url=f"{ProdamusAPIUtility.get_user.value}{id}",
+            headers=ProdamusAPIUtility.headers.value,
+            params={
+                "fields": "{id email studentCourseAccesses{libraryAccess{library{name}}}}"
+            },
+        )
+
+        response.json()["body"]["studentCourseAccesses"]
+        courses_list = []
+        for item in response.json()["body"]["studentCourseAccesses"]:
+            course = item["libraryAccess"]["library"]["name"]
+            if course not in courses_list and course in Courses.all_unique_names():
+                courses_list.append(course)
+        return courses_list
+
     # Обработка данных пользователя
 
-    async def process_user_Telegram(self, data: ProcessUser):
-        chat_id: str = CourseList.chat_id_by_title(data.Course)
-        if not chat_id:
-            self._logger.error(
-                f"Course {data.Course} doesn`t response correctly, check admin rights, and chat_id in CourseList"
-            )
-            return
-        invite_link = await self._create_link_async(chat_id)
-
-        self.send_email(data.Email, invite_link, data.Name, data.Course)
-        return invite_link
-
-    def process_user_XL(self, data: ProcessUser):
-        user_id = self._create_user_XL(data)
-        if not user_id:
-            return
-
-        scenario = self._scenario_run(data, user_id)
-        if scenario:
-            self._logger.info(
-                f"User: {data.Email} with Course: {data.Course}, processed correct"
-            )
-
-    def send_email(self, recipient_email: str, link: str, name: str, course_name: str):
+    def process_user(self, data: ProcessUser):
         try:
-            smtp_server = SMTP("smtp.gmail.com", 587)
-            msg = MIMEMultipart()
-            smtp_server.starttls()
-            smtp_server.login(GoogleUser.Login.value, GoogleUser.Password.value)
+            user_id = self._fetch_user_id_by_email(data.Email)
+            if user_id is None:
+                user_id = self._create_user(data)
+                scenario = self._scenario_run(data, user_id)
+                if scenario:
+                    self._logger.info(
+                        f"User: {data.Email} with Course: {data.Course}, processed correct"
+                    )
+                    return
 
-            msg["From"] = GoogleUser.Login.value
-            msg["To"] = recipient_email
-            msg["Subject"] = (
-                f"Приветствуем на курсе «Пилочный для тебя», {course_name} от Александры Воропаевой✨"
-            )
+            user_courses = self._fetch_user_library_name(user_id)
+            if data.Course != Courses.UPGRADE.value.tilda_name:
+                scenario = self._scenario_run(data, user_id)
+                if scenario:
+                    self._logger.info(
+                        f"User: {data.Email} with Course: {data.Course}, processed correct"
+                    )
+                    return
 
-            with open(FileTemplates.text.value, "r", encoding="utf-8") as file:
-                template_text = file.read()
-                template: Template = Template(template_text)
-                mes = template.render({"name": name, "link": link})
+            self._logger.info(f'{user_courses}')
+            if Courses.UPGRADE.value.XL_name in user_courses:
+                scenario = self._scenario_run(data, user_id)
+                if scenario:
+                    self._logger.info(
+                        f"User: {data.Email} with Course: {data.Course}, processed correct"
+                    )
+                    return
+        
+            self._logger.info(f"User: {data.Email} with Course: {data.Course}, doesn`t have course in library, scenario not run")
+            return
 
-            msg.attach(MIMEText(mes, "plain"))
-            smtp_server.sendmail(
-                GoogleUser.Login.value, recipient_email, msg.as_string()
-            )
-
-        finally:
-            smtp_server.quit()
-
-    async def write_file(self, filepath_input: str, content: str) -> bool:
-        filepath = Path(filepath_input)
-        self._logger.info(f"Start changing: {filepath}")
-        async with aiofiles.open(filepath, mode="w", encoding="utf-8") as f:
-            try:
-                await f.write(content)
-                self._logger.info(f"File {filepath.name} changed")
-                return True
-
-            except Exception as e:
-                self._logger.critical(
-                    f"Exception with type: {type(e).__name__}", exc_info=True
-                )
-                return False
-
-    async def read_file(self, filepath: Path) -> str:
-        async with aiofiles.open(filepath, mode="r", encoding="utf-8") as f:
-            try:
-                content = await f.read()
-                return content
-
-            except Exception as e:
-                self._logger.critical(
-                    f"Exception with type: {type(e).__name__}", exc_info=True
-                )
+        except Exception as e:
+            self._logger.error(f"Error while processing user: {data.Email} {data.Course}, {e.with_traceback()}")

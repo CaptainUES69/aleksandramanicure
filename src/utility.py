@@ -1,23 +1,12 @@
 from dataclasses import dataclass
 from enum import Enum
 from os import getenv
-from pathlib import Path
 from typing import List, Optional
 
 from dotenv import load_dotenv
 from pydantic import BaseModel
 
 load_dotenv(override=True)
-
-
-class GoogleUser(Enum):
-    Login = getenv("LOGIN")
-    Password = getenv("PASSWORD")
-
-
-class FileTemplates(Enum):
-    main_dir = Path("./src/templates")
-    text = Path(f"{main_dir}/greatings.txt")
 
 
 class Test(BaseModel):
@@ -53,29 +42,6 @@ class FormData(BaseModel):
 
 
 @dataclass
-class Course:
-    title: str
-    chat_id: list[str]
-
-
-class CourseList(Enum):
-    MINI = Course(title="Тариф Мини", chat_id="-1001926986163")
-    UPGRADE = Course(title="Пилочный для тебя 2.0", chat_id="-1002193144744")
-    OPTIMUM = Course(title="Тариф Оптимум", chat_id="-1002193144744")
-    PREMIUM = Course(title="Тариф Премиум", chat_id="-1002193144744")
-    VIDEO = Course(title="Видеоуроки по покрытию лаком", chat_id="-1002485625661")
-    GUIDE = Course(title="Большой гайд по уходу за руками", chat_id="-1002487896138")
-
-    @classmethod
-    def chat_id_by_title(cls, title: str) -> str | None:
-        if not hasattr(cls, "_title_to_chat"):
-            cls._title_to_chat = {
-                member.value.title: member.value.chat_id for member in cls
-            }
-        return cls._title_to_chat.get(title)
-
-
-@dataclass
 class ProcessUser:
     Email: str
     Name: str
@@ -90,11 +56,54 @@ class ProdamusAPIUtility(Enum):
 
     headers = {
         "Content-Type": "application/json",
-        "Authorization": getenv("PRODAMUS_TOKEN"),
+        "Authorization": f"{getenv("PRODAMUS_TOKEN")}",
     }
+    scenarios = {"Тест": "KSuVSIeCr0OPXaOa9_P2aQ"}
 
+    # post запросы
     create_user = "https://api.xl.ru/api/v1/crm/lead"
     scenario_run = "https://api.xl.ru/api/v1/scenario/run"
-    scenarios = {
-        'Тест': 'KSuVSIeCr0OPXaOa9_P2aQ'
-    }
+    get_users = "https://api.xl.ru/api/v1/crm/lead/table"
+
+    # get запросы
+    get_user = "https://api.xl.ru/api/v1/crm/lead/"  # {id}
+
+
+@dataclass
+class Course:
+    tilda_name: str
+    XL_name: str
+    course_id: int
+
+
+class Courses(Enum):
+    """Класс для организации работы с курсами"""
+
+    MINI = Course(tilda_name="Тариф Мини", XL_name="Пилочный для тебя", course_id=1)
+    OPTIMUM = Course(
+        tilda_name="Тариф Оптимум", XL_name="Пилочный для тебя", course_id=2
+    )
+    PREMIUM = Course(
+        tilda_name="Тариф Премиум", XL_name="Пилочный для тебя", course_id=2
+    )
+    UPGRADE = Course(
+        tilda_name="Пилочный для тебя 2.0", XL_name="Пилочный для тебя", course_id=2
+    )
+    POKRYTIE_LAKOM = Course(
+        tilda_name="Видеоуроки по покрытию лаком", XL_name="Покрытие лаком", course_id=3
+    )
+    YXOD_ZA_RUKAMI = Course(
+        tilda_name="Большой гайд по уходу за руками",
+        XL_name="Уход за руками",
+        course_id=4,
+    )
+
+    @classmethod
+    def all_unique_names(cls) -> List[str]:
+        all_names = []
+        for member in cls:
+            course = member.value
+            if isinstance(course, Course):
+                all_names.append(course.tilda_name)
+                all_names.append(course.XL_name)
+        return list(dict.fromkeys(all_names))
