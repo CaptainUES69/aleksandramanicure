@@ -23,7 +23,7 @@ async def process_buy(data: FormData | Test, bg: BackgroundTasks):
     user = ProcessUser(
         Email=data.Email, Name=data.Name, Course=data.payment.products[0].name
     )
-    bg.add_task(methods.process_user, user)        
+    bg.add_task(methods.process_user, user)
 
     return JSONResponse(
         status_code=status.HTTP_200_OK,
@@ -33,8 +33,6 @@ async def process_buy(data: FormData | Test, bg: BackgroundTasks):
 
 if __name__ == "__main__":
     try:
-        port = int(input("Input port for instance of webserver:\n"))
-        uvicorn.run("src.main:app", host="127.0.0.1", port=port)
-
+        uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
     except KeyboardInterrupt:
-        print("Webserver Close")
+        print("Server stopped by user")

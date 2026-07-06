@@ -1,0 +1,8 @@
+services:
+  app:
+    build: .
+    container_name: aleksandramanicure
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./logs:/app/logs
